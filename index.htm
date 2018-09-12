@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<link rel="stylesheet" type="text/css">
+		<title> Estação Meteorologica </title>
+
+		<!-- Initializing CSS Style -->
+
+		<style>
+
+		body {
+
+			background-color:black;
+			background-image:
+			radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
+			radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px),
+			radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 40px),
+			radial-gradient(rgba(255,255,255,.4), rgba(255,255,255,.1) 2px, transparent 30px);
+			background-size: 550px 550px, 350px 350px, 250px 250px, 150px 150px; 
+			background-position: 0 0, 40px 60px, 130px 270px, 70px 100px;
+			color: white;
+		}
+
+		H1 {
+
+			height: 30px;
+			width: 95%;
+			text-align: center;
+			color: #2B52FF;
+			padding: 30px;
+		    font-family: arial,sans-serif;
+			text-decoration: underline;
+			
+		}
+		
+		P{
+			height: 10px;
+			width: 95%;
+			text-align: center;
+			color: #2B52FF;
+			padding: 30px;
+		    font-family: arial,sans-serif;
+			
+		}
+
+		table {
+
+			color: white;
+			border: 5px solid blue;
+			border-radius: 10px;
+			border-spacing: 10px;
+			padding: 10px;
+			text-align: center;
+			width: 50%;
+		    font-family: arial,sans-serif;
+
+		}
+
+		</style>
+
+	</head>
+	
+	<body>
+		<div id = "cabecalho">
+			<H1> Estação Meteorológica </H1>
+		</div>
+		<div id = "corpo">
+			<table border="1" style="100%" cellspacing="20" align="center">
+			<tr>
+				<td width="40%">Sensor:</td>
+				<td width="10%">Status:</td>
+				<td width="40%">Atual:</td>
+				<td width="40%">Máxima:</td>
+				<td width="40%">Mínima:</td>
+			</tr>
+			<tr>
+				<td>Temperatura (<code>&deg;</code>C)</td>
+				<td>Ligado</td>
+				<td>tempC</td>
+				<td>tempMax</td>
+				<td>tempMin</td>
+			</tr>
+			<tr>
+				<td>Velocidade do Vento (Km/h)</td>
+				<td>Ligado</td>
+				<td>speedwind</td>
+				<td>speedwindmax</td>
+				<td></td>
+			</tr>
+			<tr>
+				<td>Umidade (%)</td>
+				<td>Ligado</td>
+				<td>h</td>
+				<td>hamx</td>
+				<td>hmin</td>
+			</tr>	
+			</table>
+		</div>
+
+			<P>Todos os direitos reservados © Mateus Rampon & Arthur Bockmann Grossi</P>
+	</body>
+</html>
