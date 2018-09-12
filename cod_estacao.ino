@@ -2,6 +2,7 @@
 #include <DallasTemperature.h>
 #include <DHT.h>
 #include <Ethernet.h>
+#include <SPI.h>
 
 
 //ETHERNET************************
@@ -11,10 +12,11 @@ IPAddress gateway(192,168,0,1);                           //Define GATEWAY
 IPAddress subnet(255, 255, 255, 0);                      //Define MASCARA DE REDE
 
 EthernetServer server (81);                   //Inicia o SERVIDOR WEB na PORTA (81)
+
 //********************************
 
 //TERMOMETRO**********************
-#define ONE_WIRE_BUS 4
+#define ONE_WIRE_BUS 5
 
 OneWire oneWire(ONE_WIRE_BUS);
 
@@ -55,18 +57,153 @@ float speedwindmax=0;
 #define LED 9
 //*******************************
 
+void TEMPERATURA();
+void UMIDADE();
+void addcount();
+void windvelocity();
+void RPMcalc();
+void SpeedWind();
+void SpeedWind();
+void ANEMOMETRO();
 
 void setup() {
-  Ethernet.begin(mac, ip, gateway, subnet);
+  Ethernet.begin(mac, ip, subnet, gateway);   
   server.begin();
+  //Serial.begin(9600);
   sensors.begin();
-  sensors.getAddress(sensor1, 0);
+  sensors.getDeviceCount();
+  if(!sensors.getAddress(sensor1, 0))
+    Serial.println("Sensor de Temperatura não encontrado!");
   dht.begin();
   pinMode(2, INPUT);
   digitalWrite(2, HIGH);     //internall pull-up active
-  Serial.begin(9600);
-  pinMode(9,OUTPUT);
+  pinMode(LED,OUTPUT);
+  digitalWrite(LED,HIGH);
+  delay(200); 
+  digitalWrite(LED,LOW);
+  delay(200);
+  digitalWrite(LED,HIGH);
+  delay(200);
+  digitalWrite(LED,LOW);
+  delay(200);
+  digitalWrite(LED,HIGH);
+  delay(200);
+  digitalWrite(LED,LOW);
   
+}
+
+void loop() {
+  digitalWrite(LED, HIGH);
+  TEMPERATURA();
+  UMIDADE();
+  ANEMOMETRO();
+  digitalWrite(LED, LOW);
+  
+  EthernetClient client = server.available();
+  if (client) {
+    Serial.println("new client");
+    // an http request ends with a blank line
+    boolean currentLineIsBlank = true;
+      while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        //Serial.write(c);
+        if(c == 'n' && currentLineIsBlank){
+        // send a standard http response header
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/html");
+          client.println("Connection: close");
+          client.println("Refresh: 2"); //Recarrega a pagina a cada 2seg
+          client.println();
+          client.println("<!DOCTYPE HTML>");
+          client.println("<html>");
+          client.println("<head>");
+          client.println("<title>");
+          client.println("ESTA&Ccedil;&Atilde;O METEOROL&Oacute;GICA");          //Titulo da Pagina (no navegador)
+          client.println("</title>");
+          client.println("</head>");
+          client.println("<body>");
+          client.println("<h1><center><u> ESTA&Ccedil;&Atilde;O METEOROL&Oacute;GICA </u></center></h1>");     //Titulo da Pagina (na pagina)
+          client.println("<center><table border=5 bgcolor=lightgray bordercolor = darkred cellspacing=10 cellpadding=3>");
+          client.println("<tbody>");
+          client.println("<tr>");
+          client.println("<td align=center>Sensor:</td>");                     //Nome dos Sensores
+          client.println("<p></p>");
+          client.println("<td>Status:</td>");                    //Status dos Sensores
+          client.println("<td align=center>Informa&ccedil;&atilde;o:</td>");               //Informação dos Sensores
+          client.println("<td align=center>M&aacute;xima:</td>");                  //Maxima Registrada Pelos Sensores
+          client.println("<td align=center>M&iacute;nima:</td>");                 //Minima Registrada Pelos Sensores
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td align=center>Temperatura: (&ordm;C)</td>");
+          client.println("<td align=center>");
+          client.println("Ligado");
+          client.println("</td>");
+          client.println("<td align=center>");
+          client.println(tempC);
+          client.println("</td>");           //Variavel do sensor
+          client.println("<td align=center>");
+          client.println(tempMax);
+          client.println("</td>");           //Variavel de Maxima Registrada do Sensor
+          client.println("<td align=center>");
+          client.println(tempMin);
+          client.println("</td>");          //Variavel de Minima Registrada do Sensor
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td align=center>Velocidade do Vento: (Km/h)</td>");
+          client.println("<td align=center>");
+          client.println("Ligado");
+          client.println("</td>");
+          client.println("<td align=center>");
+          client.println(speedwind);
+          client.println("</td>");         //Variavel do Sensor
+          client.println("<td align=center>");
+          client.println(speedwindmax);
+          client.println("</td>");          //Variavel de Maxima Registrada do Sensor
+          client.println("<td align=center>  --  </td>");        //Variavel de Minima Registrada do Sensor
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td align=center>Umidade: (%)</td>");
+          client.println("<td align=center>");
+          client.println("Ligado");
+          client.println("</td>");
+          client.println("<td align=center>");
+          client.println(h);
+          client.println("</td>");       //Variavel do Sensor
+          client.println("<td align=center>");
+          client.println(hmax);
+          client.println("</td>");       //Variavel de Maxima Registrada do Sensor
+          client.println("<td align=center>");
+          client.println(hmin);
+          client.println("</td>");      //Variavel de Minima Registrada do Sensor
+          client.println("</tr>");
+          client.println("</tbody>");
+          client.println("</table></center>");
+          client.println("<p><center>");
+          client.println("Esta&ccedil;&atilde;o localizada no Bairro Higien&oacute;polis - Porto Alegre RS");
+          client.println("</center></p>");
+          client.println("<p><center>");
+          client.println("Mateus Scalco Rampon &and; Arthur Bockmann Grossi");
+          client.println("</center></p>");
+          client.println("</body>");
+          client.println("</html>");
+        break;
+        }
+        if (c == 'n') {
+        // you're starting a new line
+          currentLineIsBlank = true;
+        } 
+        else if (c != 'r') {
+        // you've gotten a character on the current line
+          currentLineIsBlank = false;
+        }
+      }
+    }
+    // give the web browser time to receive the data
+    delay(1);
+    // close the connection:
+    client.stop();
+    }
 }
 
 void TEMPERATURA(){
@@ -99,18 +236,23 @@ void UMIDADE(){
     
     hmin = h;
     
-  }else if(h > hmax){
+  }
+  if(h > hmax){
 
     hmax = h;
   }
-  
+
    /*Serial.print("Umidade : "); 
    Serial.print(h);
    Serial.println(" %");
+   Serial.print("Umidade Maxima: "); 
    Serial.print(hmax);
    Serial.println(" %");
+   Serial.print("Umidade Minima: "); 
    Serial.print(hmin);
    Serial.println(" %");*/
+
+   //delay(2000);
 }
 
 void addcount(){
@@ -143,106 +285,18 @@ void ANEMOMETRO(){
 
   if(speedwind > speedwindmax)
     speedwindmax = speedwind;
-
-  /*Serial.print(speedwind);
+  
+  /*Serial.print("Velocidade do vento: ");
+  Serial.print(speedwind);
   Serial.println(" [km/h] ");
+  Serial.print("Velocidade do vento Maximo: ");
   Serial.print(speedwindmax);
   Serial.println(" [km/h] ");*/
   
   //delay(2000);                        //Delay entre as medições em milisegundos
 }
 
-void loop() {
-  digitalWrite(LED, HIGH);
-  TEMPERATURA();
-  UMIDADE();
-  ANEMOMETRO();
-  digitalWrite(LED, LOW);
-  
-  EthernetClient client = server.available();
-  if (client) {
-    Serial.println("New Client");
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {
-      char c = client.read();
-      Serial.write(c);
-      if (c == 'n' && currentLineIsBlank){
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: text/html");
-        client.println("Connection: close");
-        client.println("Refresh: 2");       //RECARREGA A PAGINA A CADA 2 SEGUNDOS
-        client.println();
-        client.println("<!DOCTYPE html>");
-        client.println("<html><head>");
-        client.println("<title>");
-        client.println("ESTA&Ccedil;&Atilde;O METEOROL&Oacute;GICA");          //Titulo da Pagina (no navegador)
-        client.println("</title>");
-        client.println("</head><body>");
-        client.println("<center><h1><b><u> ESTA&Ccedil;&Atilde;O METEOROL&Oacute;GICA </u></b></h1></center>");     //Titulo da Pagina (na pagina)
-        client.println("<p></p>");
-        client.println("<table width=20% border=40 bordercolor = #4169E1 bgcolor = #DCDCDC cellspacing=20 align=center><tbody>");
-        client.println("<tr>");
-        client.println("<td><center><b>Sensor:</b></td></center>");                     //Nome dos Sensores
-        client.println("<td><center><b>Status:</b></td></center>");                    //Status dos Sensores
-        client.println("<td><center><b>Atual:</b></td></center>");               //Informação dos Sensores
-        client.println("<td><center><b>M&aacute;xima:</b></td></center>");                  //Maxima Registrada Pelos Sensores
-        client.println("<td><center><b>M&iacute;nima:</b></td></center>");                 //Minima Registrada Pelos Sensores
-        client.println("</tr>");
-        client.println("<tr>");
-        client.println("<td><center><b>Temperatura:(&#176;C)</b></td></center>");
-        client.println("<td><center>Ligado</td></center>");
-        client.println("<td><center>");
-        client.println(tempC);           //Variavel do sensor
-        client.println("</td></center>");
-        client.println("<td><center>");
-        client.println(tempMax);           //Variavel de Maxima Registrada do Sensor
-        client.println("</td></center>");
-        client.println("<td><center>");
-        client.println(tempMin);           //Variavel de Minima Registrada do Sensor
-        client.println("</td></center>");
-        client.println("</tr>");
-        client.println("<tr>");
-        client.println("<td><center><b>Velocidade do Vento: (Km/h)</b></td></center>");
-        client.println("<td><center>Ligado</td></center>");
-        client.println("<td><center>");
-        client.println(speedwind);   //Variavel do Sensor
-        client.println("</td></center>");
-        client.println("<td><center>");
-        client.println(speedwindmax);   //Variavel de Maxima Registrada do Sensor
-        client.println("</td></center>");
-        client.println("<td><center>");
-        client.println("--------");
-        client.println("</td></center>");
-        client.println("</tr>");
-        client.println("<tr>");
-        client.println("<td><center><b>Umidade: (%)</b></td></center>");
-        client.println("<td><center>Ligado</td></center>");
-        client.println("<td><center>");   
-        client.println(h);         //Variavel do Sensor
-        client.println("</td></center>");
-        client.println("<td><center>");   
-        client.println(hmax);         //Variavel de Maxima Registrada do Sensor
-        client.println("</td></center>");
-        client.println("<td><center>");   
-        client.println(hmin);         //Variavel de Minima Registrada do Sensor
-        client.println("</td></center>");
-        client.println("</tr></tbody></table></body>");
-        client.println("<h5><center>Todos Direitos Reservados Copyright &copy; Arthur B&ouml;ckmann &and; Mateus Rampon Scalco</center></h5>");
-        client.println("</html>");
-        break;
 
-      }
-      if (c == 'n') {
-        currentLineIsBlank = true;
-      }
-      else if (c != 'r') {
-        currentLineIsBlank = false;
-      }
-    }
-  }
-  delay (1);
-  client.stop();
-}
 
 
 
