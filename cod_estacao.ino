@@ -1,181 +1,214 @@
 #define BLYNK_PRINT Serial
-#include <SPI.h>
 #include <Ethernet.h>
 #include <BlynkSimpleEthernet.h>
-#include <DHT.h>
 #include <DallasTemperature.h>
+#include <DHT.h>
 #include <OneWire.h>
 
-char auth[] = "2270362d14ae4b5e9508a6aacb8d7c8b";
+//PINOS*****************
+#define PINO_BIR 0
+#define PINO_ANEM 2
+#define PINO_SDCARD 4
+#define PINO_DHT21 5
+#define PINO_DS18B20 6
+//**********************
 
-#define WS100_CS 10
-#define SDCARD_CS 4
-#define DHTPIN 5                  // Pino do Sensor DHT11/21/22
-#define DHTTYPE DHT21            // Define o Tipo de Sensor
-#define ONE_WIRE_BUS 6          // Define o Pino do Termometro
-#define Hall sensor 2          // Define o Pino do Anemometro
+//CONSTANTES************
+#define PI 3.14159265
+#define PERIOD 5000
+#define DELAYTIME 2000
+#define RADIUS 147
 
-//BIRUTA*************************************
-//Definicoes de Constantes
-int pin = 0;                  // Define o Pino da Biruta
-float valor = 0;
-int Winddir = 0;
-//*******************************************
+char auth[] = "827e46fe2ed24967858e0afb23b0746f";
+//**********************
 
-//ANEMOMETRO**********************************
-//Definicoes de Constantes
-const float pi = 3.14159265;  // Numero Pi
-int period = 5000;           // Tempo de Medida (milisegundos)
-int delaytime = 2000;       // Tempo entre Medidas (milisegundos)
-int radius = 147;          // Raio do Anemometro (milimetros)
-
-//Definicoes de Variaveis
-unsigned int Sample = 0;      // Sample Number
-unsigned int counter = 0;    // Magnet Counter for Sensor
-unsigned int RPM = 0;       // Rotacoes por minuto
-float windspeed = 0;       // Wind Speed (km/h)
-float speedwind = 0;         // Wind speed (m/s)
-//********************************************
-
-//TERMOMETRO**********************************
-OneWire oneWire(ONE_WIRE_BUS);
-
-DallasTemperature sensors(&oneWire);
-DeviceAddress sensor1;
-
-float tempMin=999;
-float tempMax=0;
-float tempC=0;
-
-void Temperature();    //Chama a funcao para medir a Temperatura
-//********************************************
-
-//DHT21***************************************
-DHT dht(DHTPIN, DHTTYPE);
+//COMPONENTES***********
+#define DHTTYPE DHT21
+DHT dht(PINO_DHT21, DHTTYPE);
 BlynkTimer timer;
+OneWire One_DS18B20(PINO_DS18B20);
+DallasTemperature DS18B20(&One_DS18B20);
+//**********************
 
-// This function sends Arduino's up time every second to Virtual Pin (5).
-// In the app, Widget's reading frequency should be set to PUSH. This means
-// that you define how often to send data to Blynk App.
-void sendSensor() {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Falha ao Ler Dados do Sensor!");
-    return;
-    }
-    Blynk.virtualWrite(V6, h);              // Passa o Data de Umidade para o Medidor do App
-  }
-//*********************************************
+//TIPOS DE DADOS********
+struct{
+  float Temperatura;
+  float Umidade;
+}typedef DHT21_INF;
 
-// Voce pode enviar qualquer valor a qualquer momento.
-// Por favor nao envie mais de 10 valores por segundo.
+struct{
+  float Temperatura;
+}typedef DS18B20_INF;
 
+struct{
+  float VelocidadeVento;
+}typedef ANEM_INF;
 
+struct{
+  String DirecaoVento;
+}typedef BIR_INF;
+//**********************
 
+//**********************
+void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR);
+//**********************
+int counter=0;
 
 
 void setup() {
-  //Debug Console
   Serial.begin(9600);
-
-  pinMode(SDCARD_CS, OUTPUT);
-  digitalWrite(SDCARD_CS, HIGH); // Deselect the SD card
-  pinMode(2, INPUT);            // Seta o Pino 2 como Entrada (Anemometro)
-  digitalWrite(2, HIGH);       // Seta o Pino como Pull-up (Anemometro)
-
-  Blynk.begin(auth);
+  pinMode(PINO_SDCARD, OUTPUT);
+  digitalWrite(PINO_SDCARD, HIGH);
+  pinMode(PINO_ANEM, INPUT);
+  digitalWrite(PINO_ANEM, HIGH);
+  DS18B20.begin();
   dht.begin();
-  timer.setInterval(1000L, sendSensor);
-
+  
+  Blynk.begin(auth);
+//  timer.setInterval(1000L, EnviaDados);
 }
 
 void loop() {
+  DHT21_INF DHT21_;
+  DS18B20_INF DS18B20;
+  ANEM_INF ANEM;
+  BIR_INF BIR;
+  bool sucesso;
+  
   Blynk.run();
-  timer.run();
-
-//BIRUTA**************************************
-valor = analogRead(pin)* (5.0 / 1023.0);
-
-Serial.print("leitura do sensor :");
-Serial.print(valor);
-Serial.print(" volt");
-
-if (valor <= 0.27){
-  Winddir = 315;  //NO
-}else if (valor <= 0.32){
-  Winddir = 270;  //O
-}else if (valor <= 0.38){
-  Winddir = 225;  //SO
-}else if (valor <= 0.45){
-  Winddir = 180;  //S
-}else if (valor <= 0.57){
-  Winddir = 135;  //SE
-}else if (valor <= 0.75){
-  Winddir = 90;   //E
-}else if (valor <= 1.25){
-  Winddir = 45;   //NE
-}else{
-  Winddir = 000; //N
+//  timer.run();
+  
+  DHT21_ = leituraDHT21();
+  DS18B20 = leituraDS18B20();
+  ANEM = leituraANEM();
+  BIR = leituraBIR();
+  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
+  //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
+  //printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
+  delay(DELAYTIME);
 }
 
-Serial.print("Direcao a :");
-Serial.print(Winddir);
-Blynk.virtualWrite(A0, Winddir);     // Passa o Data da Birutra para o App (++ PODE DAR ERRO AKI ++)
-Serial.print(" graus");
-Serial.println();
-delay (1000);
-//********************************************
+DHT21_INF leituraDHT21(){
+  DHT21_INF inf;
 
-//ANEMOMETRO**********************************
-Sample++;
-Serial.print(Sample);
-Serial.print(": Start measurement...");
-windvelocity();
-Serial.println("  Finished.");
-Serial.print("Counter: ");
-Serial.print(counter);
-Serial.print("; RPM: ");
-RPMcalc();
-Serial.print(RPM);
-Serial.print("; Wind speed: ");
-SpeedWind();
-Serial.print(speedwind);
-Serial.print(" [km/h] ");
-Serial.print("");
+  inf.Umidade = dht.readHumidity();
+  inf.Temperatura = dht.readTemperature();
 
-delay(delaytime);       //Delay entre os Prints
-//********************************************
-}
+  return inf;
+};
 
+DS18B20_INF leituraDS18B20(){
+  DS18B20_INF inf;
 
+  
+  DS18B20.requestTemperatures();
+  
+  inf.Temperatura = DS18B20.getTempCByIndex(0);
+  
+  return inf;
+};
 
-//Medindo a Temperatura************************
-//Le as Infos do Sensor
-void Temperature(){
-  sensors.requestTemperatures();
-  tempC = sensors.getTempC(sensor1);
-  Blynk.virtualWrite(V7, tempC);        // Passa o Data de Temperatura para o App
-}
-//*********************************************
+ANEM_INF leituraANEM(){
+  unsigned int RPM;
+  ANEM_INF inf;
 
-//Medindo a Velocidade do Vento****************
+  windvelocity();
+  RPM = RPMcalc();
+  inf.VelocidadeVento = SpeedWind(RPM);
+  
+  return inf;
+};
+
 void windvelocity(){
-  speedwind = 0;
   counter = 0;
   attachInterrupt(0, addcount, RISING);
   unsigned long millis();
   long startTime = millis();
-  while(millis() < startTime + period){}
-  }
-void RPMcalc(){
-  RPM=((counter)*60)/(period/1000);     // Calcula as Rotacoes por minuto
-  }
-void SpeedWind(){
-  speedwind = (((4 * pi * radius * RPM)/60) / 1000)*3,6;   // Calcula a Velocidade do Vento em KM/h
-  Blynk.virtualWrite(V3, speedwind);                      // Passa o Data de Velocidade do Vento para o App
-  }
+  while(millis() < startTime + PERIOD){}
+};
+
+unsigned int RPMcalc(){
+  unsigned int RPM;
+  return RPM=((counter)*60)/(PERIOD/1000);  // Calculate revolutions per minute (RPM)
+};
+
+float SpeedWind(unsigned int RPM){
+  float speedwind;
+  return speedwind = (((4 * PI * RADIUS * RPM)/60) / 1000)*3.6;  // Calculate wind speed on km/h
+};
+
 void addcount(){
   counter++;
-  }
-//********************************************
+};
+
+
+BIR_INF leituraBIR(){
+  BIR_INF inf;
+  int valor;
+
+  valor = analogRead(PINO_BIR)*(5.0/1023.0);
+  if (valor <= 0.27){
+    inf.DirecaoVento = "Noroeste (NO)";  //NO
+  }else if (valor <= 0.32){
+    inf.DirecaoVento = "Oeste (O)";  //O
+  }else if (valor <= 0.38){
+    inf.DirecaoVento = "Sudoeste (SO)";  //SO
+  }else if (valor <= 0.45){
+    inf.DirecaoVento = "Sul (S)";  //S
+  }else if (valor <= 0.57){
+    inf.DirecaoVento = "Sudeste (SE)";  //SE
+  }else if (valor <= 0.75){
+    inf.DirecaoVento = "Leste (E)";   //E
+  }else if (valor <= 1.25){
+    inf.DirecaoVento = "Nordeste (NE)";   //NE
+  }else{
+    inf.DirecaoVento = "Norte (N)";  //N
+  };
+
+  return inf;
+};
+
+int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR){
+  Blynk.virtualWrite(V1, BIR.DirecaoVento);
+  Blynk.virtualWrite(V3, ANEM.VelocidadeVento);
+  Blynk.virtualWrite(V6, DHT21_.Umidade);
+  Blynk.virtualWrite(V7, ((DHT21_.Temperatura + DS18B20.Temperatura)/2));
+
+  return 1;
+  
+};
+
+//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
+//  Serial.print("----------------------------------------");
+//  Serial.println();
+//  Serial.print("DHT21:   ");
+//  Serial.print("Temperatura: ");
+//  Serial.print(DHT21_.Temperatura);
+//  Serial.print(" C");
+//  Serial.print("    ");
+//  Serial.print("Umidade: ");
+//  Serial.print(DHT21_.Umidade);
+//  Serial.print(" %");
+//  Serial.println();
+//  Serial.print("DS18B20:   ");
+//  Serial.print("Temperatura: ");
+//  Serial.print(DS18B20.Temperatura);
+//  Serial.print(" C");
+//  Serial.println();
+//  Serial.print("ANEMOMETRO:   ");
+//  Serial.print("Velocidade Vento: ");
+//  Serial.print(ANEM.VelocidadeVento);
+//  Serial.print(" km/h");
+//  Serial.println();
+//  Serial.print("BIRUTA:   ");
+//  Serial.print("Direcao Vento: ");
+//  Serial.print(BIR.DirecaoVento);
+//  Serial.print(" ");
+//  Serial.println();
+//  if(sucesso){
+//    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
+//  }else{
+//    Serial.println("Falha ao enviar dados ao aplicativo! =(");
+//  }
+//  Serial.println("----------------------------------------");
+//};
