@@ -61,6 +61,7 @@ void setup() {
   digitalWrite(PINO_SDCARD, HIGH);
   pinMode(PINO_ANEM, INPUT);
   digitalWrite(PINO_ANEM, HIGH);
+  pinMode(PINO_BIR, INPUT);
   DS18B20.begin();
   dht.begin();
   
@@ -84,7 +85,7 @@ void loop() {
   BIR = leituraBIR();
   sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
   //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
-  //printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
+  printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
   delay(DELAYTIME);
 }
 
@@ -121,7 +122,7 @@ ANEM_INF leituraANEM(){
 
 void windvelocity(){
   counter = 0;
-  attachInterrupt(0, addcount, RISING);
+  attachInterrupt(digitalPinToInterrupt(PINO_ANEM), addcount, RISING);
   unsigned long millis();
   long startTime = millis();
   while(millis() < startTime + PERIOD){}
@@ -178,37 +179,37 @@ int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR
   
 };
 
-//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
-//  Serial.print("----------------------------------------");
-//  Serial.println();
-//  Serial.print("DHT21:   ");
-//  Serial.print("Temperatura: ");
-//  Serial.print(DHT21_.Temperatura);
-//  Serial.print(" C");
-//  Serial.print("    ");
-//  Serial.print("Umidade: ");
-//  Serial.print(DHT21_.Umidade);
-//  Serial.print(" %");
-//  Serial.println();
-//  Serial.print("DS18B20:   ");
-//  Serial.print("Temperatura: ");
-//  Serial.print(DS18B20.Temperatura);
-//  Serial.print(" C");
-//  Serial.println();
-//  Serial.print("ANEMOMETRO:   ");
-//  Serial.print("Velocidade Vento: ");
-//  Serial.print(ANEM.VelocidadeVento);
-//  Serial.print(" km/h");
-//  Serial.println();
-//  Serial.print("BIRUTA:   ");
-//  Serial.print("Direcao Vento: ");
-//  Serial.print(BIR.DirecaoVento);
-//  Serial.print(" ");
-//  Serial.println();
-//  if(sucesso){
-//    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
-//  }else{
-//    Serial.println("Falha ao enviar dados ao aplicativo! =(");
-//  }
-//  Serial.println("----------------------------------------");
-//};
+void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
+  Serial.print("----------------------------------------");
+  Serial.println();
+  Serial.print("DHT21:   ");
+  Serial.print("Temperatura: ");
+  Serial.print(DHT21_.Temperatura);
+  Serial.print(" C");
+  Serial.print("    ");
+  Serial.print("Umidade: ");
+  Serial.print(DHT21_.Umidade);
+  Serial.print(" %");
+  Serial.println();
+  Serial.print("DS18B20:   ");
+  Serial.print("Temperatura: ");
+  Serial.print(DS18B20.Temperatura);
+  Serial.print(" C");
+  Serial.println();
+  Serial.print("ANEMOMETRO:   ");
+  Serial.print("Velocidade Vento: ");
+  Serial.print(ANEM.VelocidadeVento);
+  Serial.print(" km/h");
+  Serial.println();
+  Serial.print("BIRUTA:   ");
+  Serial.print("Direcao Vento: ");
+  Serial.print(BIR.DirecaoVento);
+  Serial.print(" ");
+  Serial.println();
+  if(sucesso){
+    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
+  }else{
+    Serial.println("Falha ao enviar dados ao aplicativo! =(");
+  }
+  Serial.println("----------------------------------------");
+};
