@@ -25,7 +25,7 @@ char auth[] = "827e46fe2ed24967858e0afb23b0746f";
 //COMPONENTES***********
 #define DHTTYPE DHT21
 DHT dht(PINO_DHT21, DHTTYPE);
-BlynkTimer timer;
+//BlynkTimer timer;
 OneWire One_DS18B20(PINO_DS18B20);
 DallasTemperature DS18B20(&One_DS18B20);
 //**********************
