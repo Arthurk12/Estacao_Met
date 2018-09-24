@@ -50,10 +50,9 @@ struct{
 }typedef BIR_INF;
 //**********************
 
-//**********************
-//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR);
-//**********************
+
 int counter=0;
+bool control=true;
 
 
 void setup() {
@@ -77,12 +76,8 @@ void loop() {
   ANEM_INF ANEM;
   BIR_INF BIR;
   bool sucesso;
-  bool control = false;
 
-  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>20.0){
-    control=true;
-  };
-  
+
   Blynk.run();
 //  timer.run();
   
@@ -90,7 +85,12 @@ void loop() {
   DS18B20 = leituraDS18B20();
   ANEM = leituraANEM();
   BIR = leituraBIR();
-  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR, control);
+
+  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>15.0 && ((DHT21_.Temperatura + DS18B20.Temperatura)/2)<38.0){
+    control=true;
+  };
+  
+  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
   //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
   //printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
   delay(DELAYTIME);
@@ -175,22 +175,28 @@ BIR_INF leituraBIR(){
   return inf;
 };
 
-int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, bool control){
-  
+int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR){
   
   Blynk.virtualWrite(V1, BIR.DirecaoVento);
   Blynk.virtualWrite(V3, ANEM.VelocidadeVento);
   Blynk.virtualWrite(V6, DHT21_.Umidade);
   Blynk.virtualWrite(V7, ((DHT21_.Temperatura + DS18B20.Temperatura)/2));
 
-  if(ANEM.VelocidadeVento>=50.0){
+  if(ANEM.VelocidadeVento>=40.0){
     Blynk.tweet(String("O vento esta forte, tome cuidado ao sair na rua! Velocidade do Vento: ") + ANEM.VelocidadeVento + String(" km/h. Direcão: ") + BIR.DirecaoVento + String(". Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + " °C.");
-  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)<=20.0 && control == true ){
-    Blynk.tweet(String("Esta frio la fora, lembre-se de levar um casaco antes de sair! Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + String(" °C. Velocidade do Vento: ") + ANEM.VelocidadeVento + String(". Direcao: ") + BIR.DirecaoVento + ".");
+  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)<=15.0 && control == true ){
+    Blynk.tweet(String("Esta frio la fora, leve um casaco se for sair! Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + String(" °C. Velocidade do Vento: ") + ANEM.VelocidadeVento + String(" km/h. Direcao: ") + BIR.DirecaoVento + ".");
+    control=false;
+  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>=38.0 && control == true){
+    Blynk.tweet(String("Eita que calorão! Meus sensores estao marcando: Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + String(" °C. Velocidade do Vento: ") + ANEM.VelocidadeVento + String(" km/h. Direcao: ") + BIR.DirecaoVento + ".");
+    control=false;
   };
+//  else if(ANEM.VelocidadeVento>=50.0){
+//    String currentTime = String(hour()) + ":" + minute();
+//    Blynk.tweet(String("Registro de vento forte as:") + currentTime + String(" Velocidade do Vento: ") + ANEM.VelocidadeVento + String(" km/h. Direcão: ") + BIR.DirecaoVento + ".");
+//  };
 
   return 1;
-  
 };
 
 //void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
