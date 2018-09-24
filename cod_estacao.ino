@@ -6,7 +6,7 @@
 #include <OneWire.h>
 
 //PINOS*****************
-#define PINO_BIR 0
+#define PINO_BIR 1
 #define PINO_ANEM 2
 #define PINO_SDCARD 4
 #define PINO_DHT21 5
@@ -45,12 +45,13 @@ struct{
 }typedef ANEM_INF;
 
 struct{
+  float Tensao;
   String DirecaoVento;
 }typedef BIR_INF;
 //**********************
 
 //**********************
-void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR);
+//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR);
 //**********************
 int counter=0;
 
@@ -62,6 +63,7 @@ void setup() {
   pinMode(PINO_ANEM, INPUT);
   digitalWrite(PINO_ANEM, HIGH);
   pinMode(PINO_BIR, INPUT);
+  digitalWrite(PINO_DHT21, HIGH);
   DS18B20.begin();
   dht.begin();
   
@@ -75,6 +77,11 @@ void loop() {
   ANEM_INF ANEM;
   BIR_INF BIR;
   bool sucesso;
+  bool control = false;
+
+  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>20.0){
+    control=true;
+  };
   
   Blynk.run();
 //  timer.run();
@@ -83,9 +90,9 @@ void loop() {
   DS18B20 = leituraDS18B20();
   ANEM = leituraANEM();
   BIR = leituraBIR();
-  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
+  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR, control);
   //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
-  printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
+  //printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
   delay(DELAYTIME);
 }
 
@@ -145,22 +152,21 @@ void addcount(){
 
 BIR_INF leituraBIR(){
   BIR_INF inf;
-  int valor;
 
-  valor = analogRead(PINO_BIR)*(5.0/1023.0);
-  if (valor <= 0.27){
+  inf.Tensao = analogRead(PINO_BIR)*(5.0/1023.0);
+  if (inf.Tensao <= 1.75){
     inf.DirecaoVento = "Noroeste (NO)";  //NO
-  }else if (valor <= 0.32){
+  }else if (inf.Tensao <= 1.79){
     inf.DirecaoVento = "Oeste (O)";  //O
-  }else if (valor <= 0.38){
+  }else if (inf.Tensao <= 1.81){
     inf.DirecaoVento = "Sudoeste (SO)";  //SO
-  }else if (valor <= 0.45){
+  }else if (inf.Tensao <= 1.84){
     inf.DirecaoVento = "Sul (S)";  //S
-  }else if (valor <= 0.57){
+  }else if (inf.Tensao <= 1.90){
     inf.DirecaoVento = "Sudeste (SE)";  //SE
-  }else if (valor <= 0.75){
+  }else if (inf.Tensao <= 2.0){
     inf.DirecaoVento = "Leste (E)";   //E
-  }else if (valor <= 1.25){
+  }else if (inf.Tensao <= 2.12){
     inf.DirecaoVento = "Nordeste (NE)";   //NE
   }else{
     inf.DirecaoVento = "Norte (N)";  //N
@@ -169,47 +175,58 @@ BIR_INF leituraBIR(){
   return inf;
 };
 
-int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR){
+int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, bool control){
+  
+  
   Blynk.virtualWrite(V1, BIR.DirecaoVento);
   Blynk.virtualWrite(V3, ANEM.VelocidadeVento);
   Blynk.virtualWrite(V6, DHT21_.Umidade);
   Blynk.virtualWrite(V7, ((DHT21_.Temperatura + DS18B20.Temperatura)/2));
 
+  if(ANEM.VelocidadeVento>=50.0){
+    Blynk.tweet(String("O vento esta forte, tome cuidado ao sair na rua! Velocidade do Vento: ") + ANEM.VelocidadeVento + String(" km/h. Direcão: ") + BIR.DirecaoVento + String(". Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + " °C.");
+  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)<=20.0 && control == true ){
+    Blynk.tweet(String("Esta frio la fora, lembre-se de levar um casaco antes de sair! Temperatura: ") + ((DHT21_.Temperatura + DS18B20.Temperatura)/2) + String(" °C. Velocidade do Vento: ") + ANEM.VelocidadeVento + String(". Direcao: ") + BIR.DirecaoVento + ".");
+  };
+
   return 1;
   
 };
 
-void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
-  Serial.print("----------------------------------------");
-  Serial.println();
-  Serial.print("DHT21:   ");
-  Serial.print("Temperatura: ");
-  Serial.print(DHT21_.Temperatura);
-  Serial.print(" C");
-  Serial.print("    ");
-  Serial.print("Umidade: ");
-  Serial.print(DHT21_.Umidade);
-  Serial.print(" %");
-  Serial.println();
-  Serial.print("DS18B20:   ");
-  Serial.print("Temperatura: ");
-  Serial.print(DS18B20.Temperatura);
-  Serial.print(" C");
-  Serial.println();
-  Serial.print("ANEMOMETRO:   ");
-  Serial.print("Velocidade Vento: ");
-  Serial.print(ANEM.VelocidadeVento);
-  Serial.print(" km/h");
-  Serial.println();
-  Serial.print("BIRUTA:   ");
-  Serial.print("Direcao Vento: ");
-  Serial.print(BIR.DirecaoVento);
-  Serial.print(" ");
-  Serial.println();
-  if(sucesso){
-    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
-  }else{
-    Serial.println("Falha ao enviar dados ao aplicativo! =(");
-  }
-  Serial.println("----------------------------------------");
-};
+//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
+//  Serial.print("----------------------------------------");
+//  Serial.println();
+//  Serial.print("DHT21:   ");
+//  Serial.print("Temperatura: ");
+//  Serial.print(DHT21_.Temperatura);
+//  Serial.print(" C");
+//  Serial.print("    ");
+//  Serial.print("Umidade: ");
+//  Serial.print(DHT21_.Umidade);
+//  Serial.print(" %");
+//  Serial.println();
+//  Serial.print("DS18B20:   ");
+//  Serial.print("Temperatura: ");
+//  Serial.print(DS18B20.Temperatura);
+//  Serial.print(" C");
+//  Serial.println();
+//  Serial.print("ANEMOMETRO:   ");
+//  Serial.print("Velocidade Vento: ");
+//  Serial.print(ANEM.VelocidadeVento);
+//  Serial.print(" km/h");
+//  Serial.println();
+//  Serial.print("BIRUTA:   ");
+//  Serial.print("Direcao Vento: ");
+//  Serial.print(BIR.DirecaoVento);
+//  Serial.print("    ");
+//  Serial.print("Tensao: ");
+//  Serial.print(BIR.Tensao);
+//  Serial.print(" ");
+//  Serial.println();
+//  if(sucesso){
+//    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
+//  }else{
+//    Serial.println("Falha ao enviar dados ao aplicativo! =(");
+//  }
+//  Serial.println("----------------------------------------");
+//};
