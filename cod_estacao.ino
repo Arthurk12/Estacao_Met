@@ -86,7 +86,7 @@ void loop() {
   ANEM = leituraANEM();
   BIR = leituraBIR();
 
-  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>15.0 && ((DHT21_.Temperatura + DS18B20.Temperatura)/2)<38.0){
+  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>16.0 && ((DHT21_.Temperatura + DS18B20.Temperatura)/2)<37.0){
     control=true;
   };
   
