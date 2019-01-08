@@ -8,7 +8,7 @@
 #include <WidgetRTC.h>
 
 //PINOS*****************
-#define PINO_BIR 1
+#define PINO_BIR 0
 #define PINO_ANEM 2
 #define PINO_SDCARD 4
 #define PINO_DHT21 5
@@ -59,8 +59,8 @@ WidgetRTC rtc;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(PINO_SDCARD, OUTPUT);
-  digitalWrite(PINO_SDCARD, HIGH);
+  //pinMode(PINO_SDCARD, OUTPUT);
+  //digitalWrite(PINO_SDCARD, HIGH);
   pinMode(PINO_ANEM, INPUT);
   digitalWrite(PINO_ANEM, HIGH);
   pinMode(PINO_BIR, INPUT);
@@ -93,7 +93,7 @@ void loop() {
   
   sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
   //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
-  //printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
+  printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
   delay(DELAYTIME);
 }
 
@@ -131,7 +131,7 @@ ANEM_INF leituraANEM(){
 void windvelocity(){
   counter = 0;
   attachInterrupt(digitalPinToInterrupt(PINO_ANEM), addcount, RISING);
-  unsigned long millis();
+  //unsigned long millis();
   long startTime = millis();
   while(millis() < startTime + PERIOD){}
 };
@@ -155,19 +155,19 @@ BIR_INF leituraBIR(){
   BIR_INF inf;
 
   inf.Tensao = analogRead(PINO_BIR)*(5.0/1023.0);
-  if (inf.Tensao <= 1.75){
+  if (inf.Tensao <= 0.26){
     inf.DirecaoVento = "Noroeste (NO)";   //NO
-  }else if (inf.Tensao <= 1.79){
+  }else if (inf.Tensao <= 0.30){
     inf.DirecaoVento = "Oeste (O)";       //O
-  }else if (inf.Tensao <= 1.81){
+  }else if (inf.Tensao <= 0.35){
     inf.DirecaoVento = "Sudoeste (SO)";   //SO
-  }else if (inf.Tensao <= 1.84){
+  }else if (inf.Tensao <= 0.42){
     inf.DirecaoVento = "Sul (S)";         //S
-  }else if (inf.Tensao <= 1.90){
+  }else if (inf.Tensao <= 0.51){
     inf.DirecaoVento = "Sudeste (SE)";    //SE
-  }else if (inf.Tensao <= 2.0){
+  }else if (inf.Tensao <= 0.66){
     inf.DirecaoVento = "Leste (E)";       //E
-  }else if (inf.Tensao <= 2.12){
+  }else if (inf.Tensao <= 0.94){
     inf.DirecaoVento = "Nordeste (NE)";   //NE
   }else{
     inf.DirecaoVento = "Norte (N)";       //N
@@ -214,40 +214,40 @@ int Tweets(int TemperaturaArredondada, int VelocidadeVentoArredondada, BIR_INF B
   };
 };
 
-//void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
-//  Serial.print("----------------------------------------");
-//  Serial.println();
-//  Serial.print("DHT21:   ");
-//  Serial.print("Temperatura: ");
-//  Serial.print(DHT21_.Temperatura);
-//  Serial.print(" C");
-//  Serial.print("    ");
-//  Serial.print("Umidade: ");
-//  Serial.print(DHT21_.Umidade);
-//  Serial.print(" %");
-//  Serial.println();
-//  Serial.print("DS18B20:   ");
-//  Serial.print("Temperatura: ");
-//  Serial.print(DS18B20.Temperatura);
-//  Serial.print(" C");
-//  Serial.println();
-//  Serial.print("ANEMOMETRO:   ");
-//  Serial.print("Velocidade Vento: ");
-//  Serial.print(ANEM.VelocidadeVento);
-//  Serial.print(" km/h");
-//  Serial.println();
-//  Serial.print("BIRUTA:   ");
-//  Serial.print("Direcao Vento: ");
-//  Serial.print(BIR.DirecaoVento);
-//  Serial.print("    ");
-//  Serial.print("Tensao: ");
-//  Serial.print(BIR.Tensao);
-//  Serial.print(" ");
-//  Serial.println();
-//  if(sucesso){
-//    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
-//  }else{
-//    Serial.println("Falha ao enviar dados ao aplicativo! =(");
-//  }
-//  Serial.println("----------------------------------------");
-//};
+void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
+  Serial.print("----------------------------------------");
+  Serial.println();
+  Serial.print("DHT21:   ");
+  Serial.print("Temperatura: ");
+  Serial.print(DHT21_.Temperatura);
+  Serial.print(" C");
+  Serial.print("    ");
+  Serial.print("Umidade: ");
+  Serial.print(DHT21_.Umidade);
+  Serial.print(" %");
+  Serial.println();
+  Serial.print("DS18B20:   ");
+  Serial.print("Temperatura: ");
+  Serial.print(DS18B20.Temperatura);
+  Serial.print(" C");
+  Serial.println();
+  Serial.print("ANEMOMETRO:   ");
+  Serial.print("Velocidade Vento: ");
+  Serial.print(ANEM.VelocidadeVento);
+  Serial.print(" km/h");
+  Serial.println();
+  Serial.print("BIRUTA:   ");
+  Serial.print("Direcao Vento: ");
+  Serial.print(BIR.DirecaoVento);
+  Serial.print("    ");
+  Serial.print("Tensao: ");
+  Serial.print(BIR.Tensao);
+  Serial.print(" ");
+  Serial.println();
+  if(sucesso){
+    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
+  }else{
+    Serial.println("Falha ao enviar dados ao aplicativo! =(");
+  }
+  Serial.println("----------------------------------------");
+};
