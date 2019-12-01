@@ -1,11 +1,12 @@
-#define BLYNK_MAX_SENDBYTES 256
+#include <SPI.h>
 #include <Ethernet.h>
-#include <BlynkSimpleEthernet.h>
 #include <DallasTemperature.h>
 #include <DHT.h>
 #include <OneWire.h>
 #include <TimeLib.h>
-#include <WidgetRTC.h>
+#include <MD5.h>
+#include <EthernetClient.h>
+#include <HttpClient.h>
 
 //PINOS*****************
 #define PINO_BIR 0
@@ -18,16 +19,20 @@
 //CONSTANTES************
 #define PI 3.14159265
 #define PERIOD 5000
-#define DELAYTIME 2000
+#define DELAYTIME 9000
 #define RADIUS 147
+#define KMH2KNOTS 0.539957
+#define TIME2SEND 30000
 
-char auth[] = "827e46fe2ed24967858e0afb23b0746f";
+#define s_uid       "StationHPOA"
+#define passphrase  "6gJKDQx75HdkCq3"
+
+#define fixed_url   "www.windguru.cz"
 //**********************
 
 //COMPONENTES***********
 #define DHTTYPE DHT21
 DHT dht(PINO_DHT21, DHTTYPE);
-//BlynkTimer timer;
 OneWire One_DS18B20(PINO_DS18B20);
 DallasTemperature DS18B20(&One_DS18B20);
 //**********************
@@ -43,32 +48,56 @@ struct{
 }typedef DS18B20_INF;
 
 struct{
-  float VelocidadeVento;
+  float VelocidadeVentoKMH;
+  float VelocidadeVentoKNOTS;
 }typedef ANEM_INF;
 
 struct{
   float Tensao;
   String DirecaoVento;
+  int WindDirDegrees;
 }typedef BIR_INF;
+
+struct{
+  String salt;
+  String hash;
+}typedef MD5HASH;
+
+struct{
+  MD5HASH md5;
+  String url;
+  float MeanTemperature;
+  float Humidity;
+  ANEM_INF ANEM;
+  BIR_INF BIR;
+  bool val[4];
+}typedef WINDGURU;
 //**********************
 
 int counter=0;
 bool control=true;
-WidgetRTC rtc;
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
+unsigned long t_ini = 0;
+unsigned long t_end;
+
+EthernetClient c;
+HttpClient http(c);
 
 void setup() {
   Serial.begin(9600);
   //pinMode(PINO_SDCARD, OUTPUT);
   //digitalWrite(PINO_SDCARD, HIGH);
+  if(!Ethernet.begin(mac)){
+    Serial.println("Error getting IP address via DHCP");
+  }
   pinMode(PINO_ANEM, INPUT);
   digitalWrite(PINO_ANEM, HIGH);
   pinMode(PINO_BIR, INPUT);
   digitalWrite(PINO_DHT21, HIGH);
   DS18B20.begin();
   dht.begin();
-  
-  Blynk.begin(auth);
+
 }
 
 void loop() {
@@ -76,24 +105,27 @@ void loop() {
   DS18B20_INF DS18B20;
   ANEM_INF ANEM;
   BIR_INF BIR;
-  bool sucesso;
-
-
-  Blynk.run();
-//  timer.run();
+  bool estado;
   
   DHT21_ = leituraDHT21();
   DS18B20 = leituraDS18B20();
   ANEM = leituraANEM();
   BIR = leituraBIR();
-
-  if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>16.0 && ((DHT21_.Temperatura + DS18B20.Temperatura)/2)<37.0){
-    control=true;
-  };
   
-  sucesso = EnviaDados(DHT21_, DS18B20, ANEM, BIR);
+  WINDGURU info = process_sensor_data(DHT21_, DS18B20, ANEM, BIR);
+  check_data(&info);
+  info.md5 = generate_hash();
+  info.url = url_builder(info);
+  
+  t_end = millis();
+  Serial.println(t_end - t_ini);
+  if((t_end - t_ini)>= TIME2SEND || t_ini == 0){
+    estado = send_data(info.url);
+    t_ini = t_end;
+  }
+  
   //Descomentar esta funcao para debugar o programa (o corpo dela tambem esta comentado)
-  printaDados(DHT21_, DS18B20, ANEM, BIR, sucesso);
+  printaDados(info, estado);
   delay(DELAYTIME);
 }
 
@@ -123,7 +155,7 @@ ANEM_INF leituraANEM(){
 
   windvelocity();
   RPM = RPMcalc();
-  inf.VelocidadeVento = SpeedWind(RPM);
+  inf.VelocidadeVentoKMH = SpeedWind(RPM);
   
   return inf;
 };
@@ -150,104 +182,202 @@ void addcount(){
   counter++;
 };
 
-
 BIR_INF leituraBIR(){
   BIR_INF inf;
 
   inf.Tensao = analogRead(PINO_BIR)*(5.0/1023.0);
   if (inf.Tensao <= 0.26){
     inf.DirecaoVento = "Noroeste (NO)";   //NO
+    inf.WindDirDegrees = 315;
   }else if (inf.Tensao <= 0.30){
     inf.DirecaoVento = "Oeste (O)";       //O
+    inf.WindDirDegrees = 270;
   }else if (inf.Tensao <= 0.35){
     inf.DirecaoVento = "Sudoeste (SO)";   //SO
+    inf.WindDirDegrees = 225;
   }else if (inf.Tensao <= 0.42){
     inf.DirecaoVento = "Sul (S)";         //S
+    inf.WindDirDegrees = 180;
   }else if (inf.Tensao <= 0.51){
     inf.DirecaoVento = "Sudeste (SE)";    //SE
+    inf.WindDirDegrees = 135;
   }else if (inf.Tensao <= 0.66){
     inf.DirecaoVento = "Leste (E)";       //E
+    inf.WindDirDegrees = 90;
   }else if (inf.Tensao <= 0.94){
     inf.DirecaoVento = "Nordeste (NE)";   //NE
+    inf.WindDirDegrees = 45;
   }else{
     inf.DirecaoVento = "Norte (N)";       //N
+    inf.WindDirDegrees = 0;
   };
 
   return inf;
 };
 
-BLYNK_CONNECTED() {
-  // Synchronize time on connection
-  rtc.begin();
+
+WINDGURU process_sensor_data(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR){
+  WINDGURU all_info;
+
+  if(DS18B20.Temperatura != -127 && !isnan(DHT21_.Temperatura)){
+    all_info.MeanTemperature = (int) round(((DHT21_.Temperatura + DS18B20.Temperatura)/2));
+  }else if(!isnan(DHT21_.Temperatura)){
+    all_info.MeanTemperature = (int) round((DHT21_.Temperatura));
+  }else if(DS18B20.Temperatura != -127){
+    all_info.MeanTemperature = (int) round((DS18B20.Temperatura));
+  }
+  all_info.Humidity = DHT21_.Umidade;
+  all_info.ANEM.VelocidadeVentoKMH = (int)ANEM.VelocidadeVentoKMH;
+  all_info.ANEM.VelocidadeVentoKNOTS = all_info.ANEM.VelocidadeVentoKMH * KMH2KNOTS;
+  all_info.BIR = BIR;
+
+  return all_info;
 };
 
-int EnviaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR){
-  int TemperaturaArredondada;
-  int VelocidadeVentoArredondada;
+MD5HASH generate_hash(){
+  MD5HASH md5;
+  String temp;
+  
+  randomSeed(analogRead(0));
+  String salt = String(random(233, 10009));
+  temp.concat(salt);
+  temp.concat(s_uid);
+  temp.concat(passphrase);
 
-  TemperaturaArredondada = (int) ((DHT21_.Temperatura + DS18B20.Temperatura)/2);
-  VelocidadeVentoArredondada = (int) ANEM.VelocidadeVento;
+  //generate the MD5 hash for our string
+  unsigned char* hash=MD5::make_hash(temp.c_str());
+  //generate the digest (hex encoding) of our hash
+  char *md5str = MD5::make_digest(hash, 16);
 
-  
-  Blynk.virtualWrite(V1, BIR.DirecaoVento);
-  Blynk.virtualWrite(V3, ANEM.VelocidadeVento);
-  Blynk.virtualWrite(V6, DHT21_.Umidade);
-  Blynk.virtualWrite(V7, TemperaturaArredondada);
-  
-  Tweets(TemperaturaArredondada, VelocidadeVentoArredondada, BIR, DHT21_, DS18B20, ANEM);
-  
-  return 1;
+  md5.hash = String(md5str);
+  md5.salt = salt; 
+  free(hash);
+  free(md5str);
+  return md5;
 };
 
-int Tweets(int TemperaturaArredondada, int VelocidadeVentoArredondada, BIR_INF BIR, DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM){
-  
-  if(ANEM.VelocidadeVento>=40.0 && ANEM.VelocidadeVento<50.0){
-    Blynk.tweet(String("O vento esta forte, tome cuidado ao sair na rua! Velocidade do Vento: ") + VelocidadeVentoArredondada + String(" km/h. Direcão: ") + BIR.DirecaoVento + String(". Temperatura: ") + TemperaturaArredondada + " °C.");
-  }else if(ANEM.VelocidadeVento>=50.0){
-    Blynk.tweet(String("Registro de ventos fortes as: ") + String(hour()) + ":" + minute() + "!  Velocidade do Vento: " + VelocidadeVentoArredondada + String(" km/h. Direcão: ") + BIR.DirecaoVento + String(". Temperatura: ") + TemperaturaArredondada + " °C.");
-  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)<=15.0 && control == true ){
-    Blynk.tweet(String("Esta frio la fora, leve um casaco se for sair! Temperatura: ") + TemperaturaArredondada + String(" °C. Velocidade do Vento: ") + VelocidadeVentoArredondada + String(" km/h. Direcao: ") + BIR.DirecaoVento + ".");
-    control=false;
-  }else if(((DHT21_.Temperatura + DS18B20.Temperatura)/2)>=38.0 && control == true){
-    Blynk.tweet(String("Eita que calorão! Meus sensores estao marcando: Temperatura: ") + TemperaturaArredondada + String(" °C. Velocidade do Vento: ") + VelocidadeVentoArredondada + String(" km/h. Direcao: ") + BIR.DirecaoVento + ".");
-    control=false;
-  };
+String url_builder(WINDGURU info){
+  String url;
+  url.concat("/upload/api.php?uid=");
+  url.concat(s_uid);
+  url.concat("&salt=");
+  url.concat(info.md5.salt);
+  url.concat("&hash=");
+  url.concat(info.md5.hash);
+  url.concat("&interval=");
+  url.concat(TIME2SEND/1000);
+  if(info.val[2]){
+    url.concat("&wind_avg=");
+    url.concat(info.ANEM.VelocidadeVentoKNOTS);
+  }
+  if(info.val[3]){
+    url.concat("&wind_direction=");
+    url.concat(info.BIR.WindDirDegrees);
+  }
+  if(info.val[0]){
+    url.concat("&temperature=");
+    url.concat(info.MeanTemperature);
+  }
+  if(info.val[1]){
+    url.concat("&rh=");
+    url.concat(info.Humidity);
+  }
+  return url;
 };
 
-void printaDados(DHT21_INF DHT21_, DS18B20_INF DS18B20, ANEM_INF ANEM, BIR_INF BIR, int sucesso){
+bool send_data(String url_with_variables){
+  int err =0;
+  bool ret;
+
+  err = http.get(fixed_url, String(url_with_variables).c_str());
+  if (err == 0){
+    Serial.println("startedRequest ok");
+
+    err = http.responseStatusCode();
+    if (err ==200){
+      ret = 1;
+    }else{    
+      ret =  0;
+    }
+  }else{
+    Serial.print("Connect failed: ");
+    Serial.println(err);
+    ret = 0;
+  }
+  http.stop();
+  return ret;
+};
+
+void check_data(WINDGURU *info){
+  if(!isnan(info->MeanTemperature) && (-10 < info->MeanTemperature && info->MeanTemperature < 60)){
+    info->val[0] = 1;
+  }else{
+    info->val[0]=0;
+  }
+
+  if(!isnan(info->Humidity)){
+    info->val[1] = 1;
+  }else{
+    info->val[1]=0;
+  }
+
+  if(!isnan(info->ANEM.VelocidadeVentoKNOTS) && (0 <= info->ANEM.VelocidadeVentoKNOTS)){
+    info->val[2] = 1;
+  }else{
+    info->val[2]=0;
+  }
+
+  if(!isnan(info->BIR.WindDirDegrees) && (0 <= info->BIR.WindDirDegrees && info->BIR.WindDirDegrees <= 315)){
+    info->val[3] = 1;
+  }else{
+    info->val[3]=0;
+  }
+};
+
+void printaDados(WINDGURU info, bool sucesso){
   Serial.print("----------------------------------------");
   Serial.println();
   Serial.print("DHT21:   ");
-  Serial.print("Temperatura: ");
-  Serial.print(DHT21_.Temperatura);
+  Serial.print("Temperatura Média: ");
+  Serial.print(info.MeanTemperature);
   Serial.print(" C");
   Serial.print("    ");
   Serial.print("Umidade: ");
-  Serial.print(DHT21_.Umidade);
+  Serial.print(info.Humidity);
   Serial.print(" %");
-  Serial.println();
-  Serial.print("DS18B20:   ");
-  Serial.print("Temperatura: ");
-  Serial.print(DS18B20.Temperatura);
-  Serial.print(" C");
   Serial.println();
   Serial.print("ANEMOMETRO:   ");
   Serial.print("Velocidade Vento: ");
-  Serial.print(ANEM.VelocidadeVento);
-  Serial.print(" km/h");
+  Serial.print(info.ANEM.VelocidadeVentoKMH);
+  Serial.print(" km/h         ");
+  Serial.print("Velocidade Vento: ");
+  Serial.print(info.ANEM.VelocidadeVentoKNOTS);
+  Serial.print(" knots");
   Serial.println();
   Serial.print("BIRUTA:   ");
   Serial.print("Direcao Vento: ");
-  Serial.print(BIR.DirecaoVento);
+  Serial.print(info.BIR.DirecaoVento);
+  Serial.print("     Direcao Vento(GRAUS): ");
+  Serial.print(info.BIR.WindDirDegrees);
   Serial.print("    ");
   Serial.print("Tensao: ");
-  Serial.print(BIR.Tensao);
+  Serial.print(info.BIR.Tensao);
+  Serial.print(" ");
+  Serial.println();
+  Serial.print("URL:   ");
+  Serial.print(info.url);
+  Serial.println();
+  Serial.print("HASH:   ");
+  Serial.print(info.md5.hash);
+  Serial.print("    ");
+  Serial.print("salt: ");
+  Serial.print(info.md5.salt);
   Serial.print(" ");
   Serial.println();
   if(sucesso){
-    Serial.println("Dados enviados para o aplicativo com sucesso! =)");
+    Serial.println("Dados enviados com sucesso! =)");
   }else{
-    Serial.println("Falha ao enviar dados ao aplicativo! =(");
+    Serial.println("Falha ao enviar dados! =(");
   }
   Serial.println("----------------------------------------");
 };
