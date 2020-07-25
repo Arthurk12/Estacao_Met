@@ -2,36 +2,35 @@
 #include <Ethernet.h>
 #include <Wire.h>
 #include "DFRobot_SHT20.h"
-#include <Debouncer.h>
 
+//PAINEL DE CONTROLE****
 //#define DEBUG
+#define SEND_DATA
+//**********************
 
 //PINOS*****************
-#define PINO_BIR 0
-#define PINO_ANEM 2
-#define PINO_SDCARD 4
+#define PINO_BIR                0
+#define PINO_ANEM               2
+#define PINO_SDCARD             4
 //**********************
 
 //CONSTANTES************
-#define PI 3.14159265
-#define PERIOD 12000
-#define RADIUS 147
-#define KMH2KNOTS 0.539957
-#define TIME2SEND 30000
-#define DEBOUNCE_DURATION_MS 50
+#define PI                      3.14159265
+#define RADIUS_IN_METERS        0.147
+#define MS_2_KMH                3.6
+#define KMH_2_KNOTS             0.539957
+#define PERIOD_IN_MS            5000
+#define N_LEITURAS_ANEM         6
+#define TIME_2_SEND_IN_SECONDS  PERIOD_IN_MS * N_LEITURAS_ANEM / 1000
 
-#define MIN_CTE     1000
-
-#define N_LEITURAS_ANEM 5
-
-#define s_uid       "StationHPOA"
-#define passphrase  "6gJKDQx75HdkCq3"
+#define guru_uid                "StationHPOA"
+#define guru_passphrase         "6gJKDQx75HdkCq3"
+#define windy_uid               "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjaSI6MzA3OTQ2LCJpYXQiOjE1ODE0Mzg4NzR9.VGjLN5WtJeERB6jOxUUCOJ1ksw7tdB6m7wD281rW-Bw"
 //**********************
 
 //COMPONENTES***********
 DFRobot_SHT20 sht20;
-Station myStation(s_uid, passphrase, 5);
-Debouncer debouncer(PINO_ANEM, DEBOUNCE_DURATION_MS);
+Station myStation(guru_uid, guru_passphrase, TIME_2_SEND_IN_SECONDS);
 //**********************
 
 //TIPOS DE DADOS********
@@ -41,6 +40,7 @@ struct{
 }typedef SHT20_INF;
 
 struct{
+  float VelocidadeVentoMS;
   float VelocidadeVentoKMH;
   float VelocidadeVentoKNOTS;
 }typedef ANEM_INF;
@@ -53,25 +53,26 @@ struct{
 
 //**********************
 
-int counter=0;
+volatile unsigned int rotations;
+volatile unsigned long contactBounceTime;
 bool control=true;
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-
-//EthernetClient c;
-//HttpClient http(c);
 
 
 void setup() {
   Serial.begin(9600);
-
-  //pinMode(PINO_SDCARD, OUTPUT);
-  //digitalWrite(PINO_SDCARD, HIGH);
+  
+  #ifdef SEND_DATA
   if(!Ethernet.begin(mac)){
     Serial.println("Error getting IP address via DHCP");
+  }else{
+    Serial.print("IP address assigned: ");
+    Serial.println(Ethernet.localIP());
   }
+  #endif
+  
   pinMode(PINO_ANEM, INPUT_PULLUP);
   pinMode(PINO_BIR, INPUT);
-  debouncer.subscribe(Debouncer::Edge::RISE, addcount);
   sht20.initSHT20();
 }
 
@@ -81,15 +82,10 @@ void loop() {
   BIR_INF BIR;
   int leituras=1;
   float acc=0;
-  
-  myStation.set_wind_min(MIN_CTE);
-  myStation.set_wind_max(0);
-  myStation.set_wind_avg(0);
+
 
   while(leituras <= N_LEITURAS_ANEM){
     ANEM = leituraANEM();
-    if(ANEM.VelocidadeVentoKMH < myStation.get_wind_min()) myStation.set_wind_min(ANEM.VelocidadeVentoKMH);
-    if(ANEM.VelocidadeVentoKMH > myStation.get_wind_max()) myStation.set_wind_max(ANEM.VelocidadeVentoKMH);
     acc+= ANEM.VelocidadeVentoKMH;
 
     leituras++;
@@ -101,14 +97,16 @@ void loop() {
 
   myStation.set_temp(SHT20.Temperatura);
   myStation.set_rh(SHT20.Umidade);
-  myStation.set_wind_avg(acc);
-  myStation.set_wind_dir(BIR.WindDirDegrees);
+  myStation.set_wind_avg(acc * KMH_2_KNOTS);
+  if(BIR.WindDirDegrees >=0 && BIR.WindDirDegrees <= 360) myStation.set_wind_dir(BIR.WindDirDegrees);
 
   #ifdef DEBUG
     printaDados();
   #endif
 
+  #ifdef SEND_DATA
   myStation.send_data();
+  #endif
 }
 
 SHT20_INF leituraSHT20(){
@@ -121,68 +119,67 @@ SHT20_INF leituraSHT20(){
 };
 
 ANEM_INF leituraANEM(){
-  unsigned int RPM;
+  rotations = 0;
   ANEM_INF inf;
+  
+  attachInterrupt(digitalPinToInterrupt(PINO_ANEM), rotationCount, RISING);
 
-  windvelocity();
-  RPM = RPMcalc();
-  inf.VelocidadeVentoKMH = SpeedWind(RPM);
+  delay(PERIOD_IN_MS);
+
+  detachInterrupt(digitalPinToInterrupt(PINO_ANEM));
+
+  float periodInSeconds = PERIOD_IN_MS/1000;
+  float velocidadeAngular = rotations * ((2 * PI) / periodInSeconds);
+
+
+
+  inf.VelocidadeVentoMS = velocidadeAngular * RADIUS_IN_METERS;
+  inf.VelocidadeVentoKMH = inf.VelocidadeVentoMS * MS_2_KMH;
+
+  Serial.print(inf.VelocidadeVentoKMH); Serial.print("\t\t");
+  Serial.println(rotations);
   
   return inf;
 };
 
-void windvelocity(){
-  counter = 0;
-  unsigned long millis();
-  long startTime = millis();
-  while(millis() < startTime + PERIOD){
-    debouncer.update();
-  }
-};
-
-unsigned int RPMcalc(){
-  unsigned int RPM;
-  return RPM=((counter)*60)/(PERIOD/1000);  // Calculate revolutions per minute (RPM)
-};
-
-float SpeedWind(unsigned int RPM){
-  float speedwind;
-  return speedwind = (((2 * PI * RADIUS * RPM)/60) / 1000)*3.6;  // Calculate wind speed on km/h
-};
-
-void addcount(){
-  counter++;
-  #ifdef DEBUG
+void rotationCount(){
+  if ((millis() - contactBounceTime) > 15 ) { // Debounce the switch contact
+                                              // 15 miliseconds dellimit max speed at about 220km/h
+    rotations++;
+    contactBounceTime = millis();
+    
+    #ifdef DEBUG
     Serial.println("REED");
-  #endif
+    #endif
+  }
 };
 
 BIR_INF leituraBIR(){
   BIR_INF inf;
 
   inf.Tensao = analogRead(PINO_BIR)*(5.0/1023.0);
-  if (inf.Tensao > 0.40 && inf.Tensao < 0.70){
+  if (inf.Tensao >= 0.40 && inf.Tensao < 0.85){
     inf.DirecaoVento = "Noroeste (NO)";   //NO
     inf.WindDirDegrees = 315;
-  }else if (inf.Tensao > 1.0 && inf.Tensao < 1.4){
+  }else if (inf.Tensao >= 0.85 && inf.Tensao < 1.5){
     inf.DirecaoVento = "Oeste (O)";       //O
     inf.WindDirDegrees = 270;
-  }else if (inf.Tensao > 1.6 && inf.Tensao < 2.0){
+  }else if (inf.Tensao >= 1.5 && inf.Tensao < 2.1){
     inf.DirecaoVento = "Sudoeste (SO)";   //SO
     inf.WindDirDegrees = 225;
-  }else if (inf.Tensao > 2.2 && inf.Tensao < 2.5){
+  }else if (inf.Tensao >= 2.1 && inf.Tensao < 2.65){
     inf.DirecaoVento = "Sul (S)";         //S
     inf.WindDirDegrees = 180;
-  }else if (inf.Tensao > 2.8 && inf.Tensao < 3.2){
+  }else if (inf.Tensao > 2.65 && inf.Tensao <= 3.2){
     inf.DirecaoVento = "Sudeste (SE)";    //SE
     inf.WindDirDegrees = 135;
-  }else if (inf.Tensao > 3.3 && inf.Tensao < 3.8){
+  }else if (inf.Tensao > 3.2 && inf.Tensao <= 3.8){
     inf.DirecaoVento = "Leste (E)";       //E
     inf.WindDirDegrees = 90;
-  }else if (inf.Tensao > 3.9 && inf.Tensao < 4.3){
+  }else if (inf.Tensao > 3.8 && inf.Tensao < 4.4){
     inf.DirecaoVento = "Nordeste (NE)";   //NE
     inf.WindDirDegrees = 45;
-  }else if(inf.Tensao > 4.5 && inf.Tensao < 4.9){
+  }else if(inf.Tensao >= 4.4 && inf.Tensao <= 4.9){
     inf.DirecaoVento = "Norte (N)";       //N
     inf.WindDirDegrees = 0;
   };
@@ -195,12 +192,14 @@ void printaDados(){
   Serial.print("Temperatura:");
   Serial.print(myStation.get_temp());
   Serial.print(" Umidade:");
-  Serial.print(myStation.get_rh());
-  Serial.print(" Velocidade do Vento:");
+  Serial.println(myStation.get_rh());
+  Serial.print("Velocidade do Vento:");
   Serial.print(myStation.get_wind_avg());
+  Serial.print(" Max:");
   Serial.print(myStation.get_wind_max());
-  Serial.print(myStation.get_wind_min());
-  Serial.print(" Direção do Vento:");
-  Serial.print(myStation.get_wind_dir());
+  Serial.print(" Min:");
+  Serial.println(myStation.get_wind_min());
+  Serial.print("Direção do Vento:");
+  Serial.println(myStation.get_wind_dir());
 };
 #endif

@@ -1,64 +1,65 @@
-# define Hall sensor 2         //Define o sensor no Pino 2
+#include <math.h>
 
-// Constants definitions
-const float pi = 3.14159265;       // Numero pi
-#define period 5000              // Tempo de medida(milisegundos)
-#define radius 147              // Raio do anemometro(mm)
+#define WindSensorPin (2) // The pin location of the anemometer sensor D2
 
-// Variable definitions
-unsigned int counter = 0;     // Contador magnetico para o sensor
-unsigned int RPM = 0;        // Rotações por minuto
-float speedwind = 0;       // Velocidade do vento (km/h)
-float speedwindmax=0;
+  volatile unsigned long Rotations; // Fan rotation counter used in interrupt routine
+  
+  volatile unsigned long ContactBounceTime; // Timer to avoid contact bounce in interrupt routine
+  
+  float WindSpeed; // Speed m/s
 
+void setup() {
 
+  Serial.begin(9600);
+  
+  pinMode(WindSensorPin, INPUT_PULLUP);
+  
+  attachInterrupt(digitalPinToInterrupt(WindSensorPin), isr_rotation, RISING);
+  
+  Serial.println("Wind Speed Test");
+  
+  Serial.println("Rotations\tM/S");
 
-void setup(){
-  // Set the pins
-  pinMode(2, INPUT);
-  digitalWrite(2, HIGH);     //internall pull-up active
+}
+
+void loop() {
+
+  Rotations = 0; // Set Rotations count to 0 ready for calculations
+  
+  //sei(); // Enables interrupts
+  
+  delay (3000); // Wait 3 seconds to average
+  
+  //cli(); // Disable interrupts
+  
+  // Convert to m/s using the derived formula (see notes)
+  
+  // V = N(0.35/3) = N * 0.12
+
+  // 360 GRAUS = 6,2832 RADS
+  // RADS/S = ANGULO/TEMPO = 6,2832/3
+  // V = (6,2832/3) * raio(metros) = 2,0944 * 0.147
+  
+  WindSpeed = Rotations * 0.3078768;
+  
+  Serial.print(Rotations); Serial.print("\t\t");
+  
+  Serial.println(WindSpeed*3,6);
+
+}
+
+// This is the function that the interrupt calls to increment the rotation count
+
+void isr_rotation () {
+  
+  if ((millis() - ContactBounceTime) > 15 ) { // Debounce the switch contact
+  
+    Rotations++;
     
-  //Start serial 
-  Serial.begin(9600);       // Configura a porta serial para 9600 baud
-}
+    ContactBounceTime = millis();
+    
 
-void addcount(){
-  counter++;
-} 
-
-void windvelocity(){
-  
-  counter = 0;  
-  attachInterrupt(0, addcount, RISING);
-  unsigned long millis();       
-  long startTime = millis();
-  while(millis() < startTime + period) {
   }
+  //Serial.print("ISR");
+
 }
-
-void RPMcalc(){
-  RPM=((counter)*60)/(period/1000);                       // Calculo de Rotações por minuto(RPM)
-}
-
-void SpeedWind(){
-  speedwind = (((4 * pi * radius * RPM)/60) / 1000)*3.6;  // Calcula a velocidade do vento em km/h
-}
-
-void ANEMOMETRO(){
-  windvelocity();
-  RPMcalc();
-  //print km/h  
-  SpeedWind();
-  Serial.print(speedwind);
-  Serial.print(" [km/h] ");  
-  Serial.println();
-  
-  delay(2000);                        //Delay entre as medições em milisegundos
-}
-
-void loop(){
-  ANEMOMETRO();
-}
-
-
-
