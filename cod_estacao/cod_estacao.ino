@@ -4,8 +4,8 @@
 #include "DFRobot_SHT20.h"
 
 //PAINEL DE CONTROLE****
-//#define DEBUG
-#define SEND_DATA
+#define DEBUG
+//#define SEND_DATA
 //**********************
 
 //PINOS*****************
@@ -18,7 +18,7 @@
 #define PI                      3.14159265
 #define RADIUS_IN_METERS        0.147
 #define MS_2_KMH                3.6
-#define KMH_2_KNOTS             0.539957
+#define MS_2_KNOTS              1.94384449
 #define PERIOD_IN_MS            5000
 #define N_LEITURAS_ANEM         6
 #define TIME_2_SEND_IN_SECONDS  PERIOD_IN_MS * N_LEITURAS_ANEM / 1000
@@ -81,27 +81,23 @@ void loop() {
   ANEM_INF ANEM;
   BIR_INF BIR;
   int leituras=1;
-  float acc=0;
-
 
   while(leituras <= N_LEITURAS_ANEM){
     ANEM = leituraANEM();
-    acc+= ANEM.VelocidadeVentoKMH;
-
+    myStation.set_wind_velocity(ANEM.VelocidadeVentoKNOTS);
     leituras++;
   }
-  acc/= N_LEITURAS_ANEM;
   
   SHT20 = leituraSHT20();
   BIR = leituraBIR();
 
   myStation.set_temp(SHT20.Temperatura);
   myStation.set_rh(SHT20.Umidade);
-  myStation.set_wind_avg(acc * KMH_2_KNOTS);
+
   if(BIR.WindDirDegrees >=0 && BIR.WindDirDegrees <= 360) myStation.set_wind_dir(BIR.WindDirDegrees);
 
   #ifdef DEBUG
-    printaDados();
+  printaDados();
   #endif
 
   #ifdef SEND_DATA
@@ -135,9 +131,12 @@ ANEM_INF leituraANEM(){
 
   inf.VelocidadeVentoMS = velocidadeAngular * RADIUS_IN_METERS;
   inf.VelocidadeVentoKMH = inf.VelocidadeVentoMS * MS_2_KMH;
+  inf.VelocidadeVentoKNOTS = inf.VelocidadeVentoMS * MS_2_KNOTS;
 
-  Serial.print(inf.VelocidadeVentoKMH); Serial.print("\t\t");
-  Serial.println(rotations);
+  #ifdef DEBUG
+  Serial.print(inf.VelocidadeVentoKMH); Serial.print("Km/h "); Serial.print(inf.VelocidadeVentoMS); Serial.print("M/s "); Serial.print(inf.VelocidadeVentoKNOTS); Serial.print("Knots "); Serial.print("\t\t");
+  Serial.print(rotations); Serial.println(" rotations");
+  #endif
   
   return inf;
 };
