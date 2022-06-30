@@ -23,9 +23,9 @@
 #define N_LEITURAS_ANEM         6
 #define TIME_2_SEND_IN_SECONDS  PERIOD_IN_MS * N_LEITURAS_ANEM / 1000
 
-#define guru_uid                "StationHPOA"
-#define guru_passphrase         "6gJKDQx75HdkCq3"
-#define windy_uid               "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjaSI6MzA3OTQ2LCJpYXQiOjE1ODE0Mzg4NzR9.VGjLN5WtJeERB6jOxUUCOJ1ksw7tdB6m7wD281rW-Bw"
+#define guru_uid                ""
+#define guru_passphrase         ""
+#define windy_uid               ""
 //**********************
 
 //COMPONENTES***********
